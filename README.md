@@ -1,159 +1,194 @@
-**Alur Input-Proses-Output (kedua modul sama pola-nya):**
-`index.php` (Input) → `aksi_insert.php` (validasi & simpan) → `proses.php`
-(Proses, hitung & tampilkan rumus step-by-step) → `record.php` (Output, semua
-data + hasil akhir dari VIEW).
+# Sistem Analisis Kerusakan Bangunan & Neural Network
 
-**Catatan implementasi:**
-- Hasil akhir normalisasi/NN yang ditampilkan **selalu diambil dari VIEW**,
-  bukan dihitung ulang manual di setiap file PHP, supaya `proses.php` dan
-  `record.php` selalu konsisten satu sumber data.
-- `kerusakan_bangunan/aksi_insert.php` masih pakai `mysqli_query` biasa
-  (rawan SQL injection), sedangkan `nn_kerusakan/` sudah pakai prepared
-  statement (`mysqli_prepare`) — sebaiknya modul Soal 2 disamakan.
+Website berbasis PHP dan MariaDB yang dibuat untuk mengelola data kerusakan bangunan serta melakukan perhitungan menggunakan metode Neural Network sederhana.
+
+Project ini merupakan implementasi tugas mata kuliah yang menggabungkan konsep Database, Pemrograman Web, dan Artificial Intelligence (AI).
 
 ---
 
-## 4. Struktur Database
+## Deskripsi Proyek
 
-### 4.1 `db_kerusakan_bangunan` (modul `kerusakan_bangunan/`)
+Project terdiri dari dua modul utama, yaitu:
 
-```sql
-CREATE DATABASE IF NOT EXISTS db_kerusakan_bangunan;
-USE db_kerusakan_bangunan;
+### Sistem Kerusakan Bangunan
 
-CREATE TABLE data_kerusakan (
-    id_data VARCHAR(5)  NOT NULL PRIMARY KEY,   -- D1, D2, ... D5
-    A       INT          NOT NULL,
-    B       INT          NOT NULL,
-    C       INT          NOT NULL,
-    D       INT          NOT NULL,
-    E       INT          NOT NULL
-);
+Modul yang digunakan untuk mengelola data kerusakan bangunan berdasarkan parameter A, B, C, D, dan E, serta melakukan normalisasi data menggunakan View pada MariaDB.
 
-INSERT INTO data_kerusakan (id_data, A, B, C, D, E) VALUES
-('D1', 3, 3, 3, 2, 3),
-('D2', 3, 3, 3, 3, 2),
-('D3', 2, 2, 2, 3, 2),
-('D4', 2, 1, 2, 2, 3),
-('D5', 1, 2, 2, 2, 3);
+### Sistem Neural Network
 
--- VIEW: seluruh nilai parameter sudah ternormalisasi (Persamaan 1)
-CREATE VIEW view_normalisasi AS
-SELECT
-    id_data,
-    A / (SELECT SQRT(SUM(A*A)) FROM data_kerusakan) AS A,
-    B / (SELECT SQRT(SUM(B*B)) FROM data_kerusakan) AS B,
-    C / (SELECT SQRT(SUM(C*C)) FROM data_kerusakan) AS C,
-    D / (SELECT SQRT(SUM(D*D)) FROM data_kerusakan) AS D,
-    E / (SELECT SQRT(SUM(E*E)) FROM data_kerusakan) AS E
-FROM data_kerusakan;
+Modul yang digunakan untuk melakukan perhitungan Neural Network sederhana berdasarkan bobot parameter yang telah ditentukan.
+
+---
+
+## Fitur Utama
+
+### Sistem Kerusakan Bangunan
+
+* Menambahkan data kerusakan bangunan
+* Menyimpan data ke database MariaDB
+* Menampilkan seluruh data yang tersimpan
+* Melakukan normalisasi data menggunakan View
+
+### Sistem Neural Network
+
+* Menambahkan data parameter
+* Menentukan bobot setiap parameter
+* Menghitung nilai net input
+* Menerapkan fungsi aktivasi
+* Menampilkan hasil klasifikasi
+
+---
+
+## Teknologi yang Digunakan
+
+| Teknologi | Fungsi                   |
+| --------- | ------------------------ |
+| PHP       | Backend                  |
+| HTML5     | Struktur halaman         |
+| CSS3      | Tampilan antarmuka       |
+| MariaDB   | Database                 |
+| Laragon   | Local development server |
+
+---
+
+## Struktur Folder
+
+```text
+project/
+│
+├── assets/
+├── kerusakan_bangunan/
+├── nn_kerusakan/
+├── database.sql
+└── index.php
 ```
 
-**ERD ringkas:** 1 tabel (`data_kerusakan`) + 1 view (`view_normalisasi`,
-struktur kolom identik, isi sudah ternormalisasi).
+---
 
-### 4.2 `db_neural_network` (modul `nn_kerusakan/`)
+## Database
 
-```sql
-CREATE DATABASE IF NOT EXISTS db_neural_network;
-USE db_neural_network;
+Project ini menggunakan MariaDB dengan dua database utama.
 
--- Tabel 1: bobot parameter
-CREATE TABLE parameter (
-    kode_parameter  VARCHAR(5)     NOT NULL PRIMARY KEY,  -- 'A','B','C','D','E'
-    nama_parameter  VARCHAR(50)    DEFAULT NULL,
-    nilai_bobot     DECIMAL(5,2)   NOT NULL
-);
+### 1. db_kerusakan_bangunan
 
-INSERT INTO parameter (kode_parameter, nama_parameter, nilai_bobot) VALUES
-('A', 'Parameter A', 3.0),
-('B', 'Parameter B', 2.5),
-('C', 'Parameter C', 2.0),
-('D', 'Parameter D', 1.5),
-('E', 'Parameter E', 1.0);
+Database yang digunakan untuk menyimpan data kerusakan bangunan dan hasil normalisasi.
 
--- Tabel 2: data kerusakan + target
-CREATE TABLE kerusakan (
-    kode_data VARCHAR(5)  NOT NULL PRIMARY KEY,  -- D1..D5
-    param_A   INT NOT NULL,
-    param_B   INT NOT NULL,
-    param_C   INT NOT NULL,
-    param_D   INT NOT NULL,
-    param_E   INT NOT NULL,
-    target    INT NOT NULL
-);
+#### Struktur Database
 
-INSERT INTO kerusakan (kode_data, param_A, param_B, param_C, param_D, param_E, target) VALUES
-('D1', 3, 3, 2, 3, 3, 3),
-('D2', 3, 3, 3, 2, 3, 3),
-('D3', 2, 2, 3, 2, 2, 2),
-('D4', 1, 2, 2, 3, 2, 2),
-('D5', 2, 2, 2, 3, 2, 2);
+Tabel:
 
--- VIEW: proses NN lengkap (net input -> aktivasi -> output)
-CREATE VIEW view_hasil_nn AS
-SELECT
-    k.kode_data,
-    nt.net_input,
-    CASE WHEN nt.net_input >= 1 THEN 'YA' ELSE 'TIDAK' END AS aktivasi,
-    CASE WHEN nt.net_input >= 1 THEN 1 ELSE 0 END         AS output_nn
-FROM kerusakan k
-JOIN (
-    SELECT
-        k2.kode_data,
-        (k2.param_A * pa.nilai_bobot +
-         k2.param_B * pb.nilai_bobot +
-         k2.param_C * pc.nilai_bobot +
-         k2.param_D * pd.nilai_bobot +
-         k2.param_E * pe.nilai_bobot) AS net_input
-    FROM kerusakan k2
-    JOIN parameter pa ON pa.kode_parameter = 'A'
-    JOIN parameter pb ON pb.kode_parameter = 'B'
-    JOIN parameter pc ON pc.kode_parameter = 'C'
-    JOIN parameter pd ON pd.kode_parameter = 'D'
-    JOIN parameter pe ON pe.kode_parameter = 'E'
-) nt ON nt.kode_data = k.kode_data;
+* data_kerusakan
+
+View:
+
+* view_normalisasi
+
+---
+
+### 2. db_neural_network
+
+Database yang digunakan untuk proses perhitungan Neural Network.
+
+#### Struktur Database
+
+Tabel:
+
+* kerusakan
+* parameter
+
+View:
+
+* view_hasil_nn
+
+---
+
+## Alur Sistem
+
+### Sistem Kerusakan Bangunan
+
+1. Pengguna menginput data kerusakan bangunan beserta nilai parameternya
+2. Sistem memvalidasi data yang dimasukkan
+3. Data disimpan ke database MariaDB
+4. Sistem melakukan proses normalisasi
+5. Sistem menampilkan data yang telah tersimpan
+
+---
+
+### Sistem Neural Network
+
+1. Pengguna menginput data parameter yang akan diproses
+2. Pengguna menentukan bobot untuk setiap parameter
+3. Sistem menghitung nilai net input berdasarkan bobot yang diberikan
+4. Sistem menerapkan fungsi aktivasi
+5. Sistem menghasilkan output klasifikasi
+
+---
+
+## Cara Menjalankan Project
+
+### 1. Download atau Clone Repository
+
+```bash
+git clone https://github.com/username/nama-repository.git
 ```
 
-> ⚠️ Cek ulang urutan A-B-C-D-E Tabel 2 di lembar soal asli kamu sebelum
-> insert seed data di atas — beberapa kombinasi nilai D2–D5 bisa beda urutan
-> kolom dari yang tertulis di soal.
+Atau download file ZIP.
 
-**ERD ringkas:** `parameter` ↔ `kerusakan` terhubung secara logis lewat VIEW
-`view_hasil_nn` (bukan foreign key formal — bobot dipakai bersama oleh semua
-baris `kerusakan` lewat join `kode_parameter`).
+### 2. Pindahkan Folder Project
+
+Salin folder project ke:
+
+```text
+C:\laragon\www\
+```
+
+### 3. Jalankan Laragon
+
+Aktifkan:
+
+* Apache
+* MariaDB
+
+### 4. Import Database
+
+Buka phpMyAdmin melalui Laragon, lalu import file `database.sql`.
+
+### 5. Jalankan Aplikasi
+
+Buka browser:
+
+```
+http://localhost/nama_project/
+```
+
+atau
+
+```
+http://nama_project.test
+```
 
 ---
 
-## 5. Cara Menjalankan (Laragon)
+## Tujuan Pembuatan
 
-1. Import kedua skema SQL di atas lewat phpMyAdmin/HeidiSQL.
-2. Letakkan folder `sistem_Kerusakan/` di `C:\laragon\www\`.
-3. Buka `http://localhost/sistem_Kerusakan/` → pilih Soal 2 atau Soal 3.
-4. Sesuaikan `koneksi.php` di masing-masing modul dengan user/password MySQL
-   Laragon kamu (default `root` / tanpa password).
+Project ini dibuat untuk:
 
----
-
-## 6. Catatan Pengembangan Lanjutan
-- Samakan validasi input `kerusakan_bangunan/aksi_insert.php` ke prepared
-  statement seperti di modul `nn_kerusakan/`.
-- `nama_parameter` tidak diisi lewat form (form hanya kirim `nilai_bobot`) —
-  isi manual lewat seed data, atau tambahkan field-nya ke form kalau mau
-  dinamis.
+* Mengimplementasikan konsep database menggunakan MariaDB
+* Mengimplementasikan pemrograman web menggunakan PHP
+* Mengimplementasikan normalisasi data menggunakan View
+* Mengimplementasikan Neural Network sederhana
+* Memenuhi tugas mata kuliah
 
 ---
 
-## 7. Daftar Pustaka
+## Pengembang
 
-1. Almais, A. T. W., Susilo, A., Naba, A., Sarosa, M., Crysdian, C.,
-   Wicaksono, H., Tazi, I., Hariyadi, M. A., Muslim, M. A., Basid, P. M. N. S.
-   A., Arif, Y. M., Purwanto, M. S., Parwatiningtyas, D., & Supriyono, S.
-   (2023). Principal Component Analysis-Based Data Clustering for Labeling
-   of Level Damage Sector in Post-Natural Disasters. *IEEE Access*.
-   https://doi.org/10.1109/ACCESS.2023.3275852
-2. Almais, A. T. W., Susilo, A., Naba, A., Tazi, I., dkk. (2024). SDDS:
-   Damage Level Determination System for Post-Natural Disaster Sector Based
-   on Building Characteristics. *The 18th IMT-GT International Conference on
-   Mathematics, Statistics and their Applications*, Sciendo, 23–28.
-   https://doi.org/10.2478/9788367405713-005
+Siti Alfinahur Salsabila
+Teknik Informatika
+UIN Maulana Malik Ibrahim Malang
+
+---
+
+## Lisensi
+
+Project ini dibuat untuk keperluan pembelajaran dan akademik.
